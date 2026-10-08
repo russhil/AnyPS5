@@ -452,10 +452,10 @@ bool readsBuiltin(const std::vector<spv::BuiltIn>& read, spv::BuiltIn builtin) {
     return std::find(read.begin(), read.end(), builtin) != read.end();
 }
 
-std::vector<std::uint32_t> pixelNoPerspectiveLocations(bool barycentricEnabled) {
+std::vector<std::uint32_t> pixelNoPerspectiveLocations(bool barycentricEnabled, std::uint32_t inputs = 0x22u) {
     auto queue = makeState();
-    queue.context[0x1b3] = 0x22u;
-    queue.context[0x1b4] = 0x22u;
+    queue.context[0x1b3] = inputs;
+    queue.context[0x1b4] = inputs;
     queue.context[0x1b6] = 2u;
     queue.context[0x191] = 0u;
     queue.context[0x192] = 1u;
@@ -560,6 +560,37 @@ void PixelInputLayoutTests() {
     const auto noPerspective = pixelNoPerspectiveLocations(false);
     Require(noPerspective.size() == 1 && noPerspective[0] == 1u, "only the parameter interpolated through the linear pair must be NoPerspective");
     Require(pixelNoPerspectiveLocations(true).empty(), "explicit interpolation must not interpolate parameter arrays a second time");
+    Require(pixelNoPerspectiveLocations(false, 0x12u) == std::vector<std::uint32_t>{1u}, "only the parameter interpolated through the linear sample pair must be NoPerspective");
+    for (const auto source : {0u, 1u}) {
+        const auto read = pixelBuiltinsRead(0x3u, 0x3u, source);
+        Require(readsBuiltin(read, spv::BuiltInBaryCoordKHR) && !readsBuiltin(read, spv::BuiltInFragCoord), "a PERSP_SAMPLE I/J VGPR does not hold the barycentrics: v" + std::to_string(source));
+    }
+    for (const auto source : {2u, 3u}) {
+        const auto read = pixelBuiltinsRead(0x12u, 0x12u, source);
+        Require(readsBuiltin(read, spv::BuiltInBaryCoordNoPerspKHR) && !readsBuiltin(read, spv::BuiltInFragCoord), "a LINEAR_SAMPLE I/J VGPR does not hold the barycentrics: v" + std::to_string(source));
+    }
+    pixel = decode(0x13u, 0x13u);
+    Require(pixel.perspectiveSample && pixel.linearSample && pixel.sampleShading && pixel.hasPerspectiveCenterVgpr, "the sample input flags were not decoded");
+    pixel = decode(0x1u, 0x3u);
+    Require(pixel.perspectiveSample && !pixel.linearSample && !pixel.sampleShading && !pixel.hasPerspectiveCenterVgpr, "a lone PERSP_SAMPLE was not decoded");
+    for (const auto offset : {0x2feu, 0x302u, 0x306u, 0x30au}) {
+        queue.context[offset] = 0xfff00u;
+        static_cast<void>(decode(0x13u, 0x13u));
+        for (const auto location : {0x01u, 0x80u}) {
+            queue.context[offset] = location;
+            static_cast<void>(decode(0x2u, 0x2u));
+            expectFailure([&] { static_cast<void>(decode(0x1u, 0x1u)); }, "moves sample 0 off the pixel center");
+            expectFailure([&] { static_cast<void>(decode(0x10u, 0x10u)); }, "moves sample 0 off the pixel center");
+        }
+        queue.context.erase(offset);
+    }
+    {
+        std::vector<AgcDriver::Graphics::RegisterRead> log;
+        AgcDriver::Graphics::RegisterReadLog() = &log;
+        static_cast<void>(decode(0x13u, 0x13u));
+        AgcDriver::Graphics::RegisterReadLog() = nullptr;
+        for (const auto read : log) Require(AgcDriver::Graphics::DrawKeyCovers(read), "DrawKeyRegisters lacks a register the sample I/J decode reads: " + std::to_string(read.offset));
+    }
     auto read = pixelBuiltinsRead(0x106u, 0x106u, 4u);
     Require(readsBuiltin(read, spv::BuiltInFragCoord) && !readsBuiltin(read, spv::BuiltInBaryCoordKHR), "POS_X is not in v4 after the center and centroid pairs");
     read = pixelBuiltinsRead(0x326u, 0x326u, 5u);

@@ -836,7 +836,7 @@ void verifyPixelRequestSerialization() {
         return std::tie(value.interpolatorCount, value.interpolatorSettings, value.wave32, value.inputAddr,
                         value.hasPerspectiveCenterVgpr, value.perspectiveCentroid, value.posX, value.posY,
                         value.posZ, value.posW, value.frontFace, value.ancillary, value.sampleShading,
-                        value.noPerspective, value.linearCentroid, value.pixelKillEnable, value.depthExportEnable,
+                        value.noPerspective, value.linearCentroid, value.perspectiveSample, value.linearSample, value.pixelKillEnable, value.depthExportEnable,
                         value.sampleMaskExportEnable, value.earlyZ, value.executeOnNoop, value.conservativeZExport, value.orderedPixelShader,
                         value.targetOutputMode, value.targetExportMapping);
     };
@@ -871,6 +871,8 @@ void verifyPixelRequestSerialization() {
         .sampleShading = true,
         .noPerspective = true,
         .linearCentroid = true,
+        .perspectiveSample = true,
+        .linearSample = true,
         .pixelKillEnable = true,
         .depthExportEnable = true,
         .sampleMaskExportEnable = true,
@@ -916,12 +918,12 @@ void verifyPixelRequestSerialization() {
     minimal.context.waveSize = 64;
     minimal.context.pixel = ShaderPixelStageInfo{};
     const auto encoded = serializer.Serialize(minimal);
-    require(requestPrefix(encoded, 8u) == "NVNQQQ0AAAA=", "new requests did not use serialization version 13");
+    require(requestPrefix(encoded, 8u) == "NVNQQQ4AAAA=", "new requests did not use serialization version 14");
     constexpr std::size_t mappingOffset = 8u + 37u + 18u + 163u;
     for (std::size_t bytes = 0; bytes < 8u; ++bytes) {
-        expectFailure([&] { static_cast<void>(serializer.Deserialize(requestPrefix(encoded, mappingOffset + bytes))); }, "truncated data", "a truncated version-12 pixel mapping was accepted");
+        expectFailure([&] { static_cast<void>(serializer.Deserialize(requestPrefix(encoded, mappingOffset + bytes))); }, "truncated data", "a truncated version-14 pixel mapping was accepted");
     }
-    for (const auto unsupported : {"NVNQQQAAAAA=", "NVNQQQ4AAAA="}) {
+    for (const auto unsupported : {"NVNQQQAAAAA=", "NVNQQQ8AAAA="}) {
         expectFailure([&] { static_cast<void>(serializer.Deserialize(unsupported)); }, "serialization version", "an unsupported request version was accepted");
     }
 }
@@ -1090,12 +1092,14 @@ void verifyPixelInputs() {
     std::vector<std::uint64_t> key;
     RecompileCacheKey::Build(request, key);
     const auto first = key;
-    for (const auto change : {0, 1, 2}) {
+    for (const auto change : {0, 1, 2, 3, 4}) {
         auto other = request;
         auto changed = pixel;
         if (change == 0) changed.inputAddr |= PixelInputBit(PixelInput::PerspectiveSample);
         if (change == 1) changed.perspectiveCentroid = false;
         if (change == 2) changed.linearCentroid = false;
+        if (change == 3) changed.perspectiveSample = true;
+        if (change == 4) changed.linearSample = true;
         other.context.pixel = changed;
         RecompileCacheKey::Build(other, key);
         require(key != first && RecompileCacheKey::ContextHash(request) != RecompileCacheKey::ContextHash(other), "the cache keys ignore the pixel input layout");

@@ -169,6 +169,8 @@ private:
         append(key, value.sampleShading);
         append(key, value.noPerspective);
         append(key, value.linearCentroid);
+        append(key, value.perspectiveSample);
+        append(key, value.linearSample);
         append(key, value.pixelKillEnable);
         append(key, value.depthExportEnable);
         append(key, value.sampleMaskExportEnable);

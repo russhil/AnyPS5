@@ -124,6 +124,8 @@ struct ShaderPixelStageInfo {
     bool sampleShading;
     bool noPerspective;
     bool linearCentroid;
+    bool perspectiveSample;
+    bool linearSample;
     bool pixelKillEnable;
     bool depthExportEnable;
     bool sampleMaskExportEnable;

@@ -25,6 +25,7 @@ constexpr std::uint32_t spiPsInputAddr = 0x1B4;
 constexpr std::uint32_t spiPsInControl = 0x1B6;
 constexpr std::uint32_t dbShaderControl = 0x203;
 constexpr std::uint32_t spiShaderColFormat = 0x1C5;
+constexpr std::array<std::uint32_t, 4> paScAaSampleLocsPixelS0{0x2FE, 0x302, 0x306, 0x30A};
 constexpr std::uint32_t defaultPixelInputs = 0x2u;
 
 std::uint32_t read(const Registers& registers, std::uint32_t offset, RegisterBank bank) {
@@ -133,6 +134,15 @@ ShaderRecompiler::ShaderPixelStageInfo DecodePixelStageInfo(const Registers& con
     const bool sampleMaskExportEnable = ((shaderControl >> 8u) & 0x1u) != 0;
     const auto zOrder = (shaderControl >> 4u) & 0x3u;
     const auto loaded = [&](PixelInput input) { return (activeInputs & PixelInputBit(input)) != 0; };
+    if (loaded(PixelInput::PerspectiveSample) || loaded(PixelInput::LinearSample)) {
+        for (const auto offset : paScAaSampleLocsPixelS0) {
+            NoteRegisterRead(RegisterBank::Context, offset);
+            const auto it = context.find(offset);
+            if (it != context.end() && (it->second & 0xFFu) != 0u) {
+                throw std::runtime_error("AGC graphics: a sample I/J pair is loaded while PA_SC_AA_SAMPLE_LOCS moves sample 0 off the pixel center");
+            }
+        }
+    }
     return ShaderRecompiler::ShaderPixelStageInfo{
         .interpolatorCount = inputNum,
         .interpolatorSettings = interpolatorSettings,
@@ -149,6 +159,8 @@ ShaderRecompiler::ShaderPixelStageInfo DecodePixelStageInfo(const Registers& con
         .sampleShading = loaded(PixelInput::PerspectiveSample) && loaded(PixelInput::LinearSample),
         .noPerspective = loaded(PixelInput::LinearCenter),
         .linearCentroid = loaded(PixelInput::LinearCentroid),
+        .perspectiveSample = loaded(PixelInput::PerspectiveSample),
+        .linearSample = loaded(PixelInput::LinearSample),
         .pixelKillEnable = pixelKillEnable,
         .depthExportEnable = depthExportEnable,
         .sampleMaskExportEnable = sampleMaskExportEnable,
