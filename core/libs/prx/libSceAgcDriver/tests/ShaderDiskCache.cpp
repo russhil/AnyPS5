@@ -85,6 +85,7 @@ void requireSameResult(const RecompileResult& left, const RecompileResult& right
         const auto& b = right.vertexAttributes[i];
         require(a.location == b.location && a.components == b.components && a.resource.fields == b.resource.fields && a.fetchIndex == b.fetchIndex && a.formatComponents == b.formatComponents, prefix + "vertex attribute differs");
     }
+    require(left.barycentricEmulation.active == right.barycentricEmulation.active && left.barycentricEmulation.smooth == right.barycentricEmulation.smooth && left.barycentricEmulation.linear == right.barycentricEmulation.linear, prefix + "barycentric emulation differs");
 }
 
 void requireSameVariant(const CompiledVariant& left, const CompiledVariant& right, const char* what) {
@@ -149,6 +150,7 @@ RecompileResult sampleResult() {
     result.instanceOffsetConflict = true;
     result.parameterExports = {0, 3, 7};
     result.fragmentParameters = {{0, 1, true, false, true}, {2, 3, false, true}};
+    result.barycentricEmulation = {true, false, true};
     result.variantId = 99;
     return result;
 }
